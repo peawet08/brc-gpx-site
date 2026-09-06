@@ -18,6 +18,9 @@ Live page (once set up): **https://gpx.billingerunning.club**
 
 ## Weekly routine (for the whole team)
 
+> 📄 **Uploaders:** there's a simple, non‑technical guide at
+> **[HOW-TO-UPLOAD.md](HOW-TO-UPLOAD.md)** — share that with anyone who sets a weekly run.
+
 1. Open the shared **WeeklyRoutes** Google Drive folder.
 2. Upload the route named by its **week number**, optionally with a run name:
    - `37.gpx` — just the route, no title.
