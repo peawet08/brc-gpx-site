@@ -7,7 +7,10 @@ the route for their watch or phone.
 - **You never edit the page.** Each week, someone just uploads the route file to a shared
   Google Drive folder.
 - **Files are named by week number:** `36.gpx`, `37.gpx`, … (ISO week, 1–52).
-- The page reads the correct file for the current week straight from Google Drive.
+- **Optionally add a run name** after the number: `37-Electric Dog.gpx` makes the page show
+  the route titled **"Electric Dog"**. (A plain `37.gpx` works too — it just has no title.)
+- The page reads the correct file straight from Google Drive and always shows the
+  **upcoming Wednesday run** (see below).
 
 Live page (once set up): **https://gpx.billingerunning.club**
 
@@ -15,14 +18,32 @@ Live page (once set up): **https://gpx.billingerunning.club**
 
 ## Weekly routine (for the whole team)
 
-1. Open the shared **Route GPX** Google Drive folder.
-2. Upload this week's route as **`<week number>.gpx`** — e.g. in week 36 upload `36.gpx`.
+1. Open the shared **WeeklyRoutes** Google Drive folder.
+2. Upload the route named by its **week number**, optionally with a run name:
+   - `37.gpx` — just the route, no title.
+   - `37-Electric Dog.gpx` — the page shows the run titled **"Electric Dog"**.
    - If a file for that week already exists (from last year), just replace/overwrite it.
    - Not sure of the week number? It's shown at the top of the live page.
 3. Done. The page updates itself.
 
-> Tip: name the file exactly the number, no extras — `36.gpx`, not `Week 36 route.gpx`.
-> (A zero-padded name like `06.gpx` also works.)
+> Naming rules: start with the week number, then an optional `-` or space and the run name.
+> `37.gpx`, `37-Electric Dog.gpx`, `37 Electric Dog.gpx` and zero-padded `07-Foo.gpx` all
+> work. Keep it to one route file per week.
+
+### Which week shows by default?
+
+The page is built around the **Wednesday run**:
+
+- On **run day (Wednesday)** it shows **that day's** route.
+- From **Thursday onwards** it automatically rolls forward to **next Wednesday's** run, so
+  people arriving after a run see the *upcoming* one to prep for.
+- The **week number is the ISO week of the run date** (e.g. the run on Wed 2 Sep 2026 is
+  week 36; Wed 9 Sep is week 37).
+- Visitors can still use **← Prev / Next →** to browse other weeks, and **Upcoming run** to
+  jump back to the default.
+
+Runs on a different day? Change `runDay` in the `CONFIG` block of `index.html`
+(`0`=Sunday … `3`=Wednesday … `6`=Saturday).
 
 ---
 
@@ -111,7 +132,7 @@ real route before wiring up Drive, you can temporarily paste a GPX string into t
 console:
 
 ```js
-renderGpx(await (await fetch('sample-route.gpx')).text(), 36);
+renderGpx(await (await fetch('sample-route.gpx')).text(), { title: "Electric Dog" }, DEFAULT_RUN);
 ```
 
 *(Local `fetch` of a file needs the page served over http — e.g. VS Code's Live Server — or
@@ -123,9 +144,9 @@ just deploy to GitHub Pages and test there.)*
 
 - `index.html` is fully self-contained (HTML + CSS + JS) and uses two free libraries from a
   CDN: **Leaflet** (map) and **leaflet-gpx** (GPX parsing + distance/elevation).
-- It works out the current ISO week number, asks the Google Drive API for
-  `<week>.gpx` in the folder, downloads it, draws it on an OpenStreetMap map, and offers it
-  for download.
-- **Prev / Next / This week** buttons let viewers browse other weeks; if a week's file isn't
-  uploaded yet, a friendly "no route uploaded yet" message shows.
+- It works out the upcoming Wednesday run, lists the folder via the Google Drive API,
+  matches the file whose name starts with that week number, downloads it, draws it on an
+  OpenStreetMap map, reads any title from the filename, and offers it for download.
+- **Prev / Next / Upcoming run** buttons let viewers browse other weeks; if a week's file
+  isn't uploaded yet, a friendly "no route uploaded yet" message shows.
 - No server, no database, no page edits — just the weekly file upload to Drive.

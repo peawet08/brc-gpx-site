@@ -153,9 +153,9 @@
   </div>
 
   <div class="nav-bar week-bar">
-    <button id="prevBtn" title="Previous week">← Prev</button>
-    <button id="thisBtn" class="btn-primary" title="Jump to the current week">This week</button>
-    <button id="nextBtn" title="Next week">Next →</button>
+    <button id="prevBtn" title="Previous week's run">← Prev</button>
+    <button id="thisBtn" class="btn-primary" title="Jump to the next upcoming run">Upcoming run</button>
+    <button id="nextBtn" title="Next week's run">Next →</button>
   </div>
 
   <div class="card">
@@ -214,7 +214,8 @@
 const CONFIG = {
   FOLDER_ID: "167G1f3wpk85hLEdKkiio1x-0TaErFmrF",   // Google Drive "WeeklyRoutes" folder
   API_KEY:   "AIzaSyBN0VfafvwpHasC9a0j9r4LlvcmUeVq6VA", // read-only, referrer-restricted key
-  routeColor: "#209D50"           // brand green for the map track
+  routeColor: "#209D50",          // brand green for the map track
+  runDay: 3                       // weekly run day: 0=Sun, 1=Mon … 3=Wed … 6=Sat
 };
 
 /* ---------- ISO-8601 week number (Mon-based) ---------- */
@@ -227,22 +228,36 @@ function isoWeek(d) {
   firstThu.setUTCDate(firstThu.getUTCDate() - firstDay + 3);
   return 1 + Math.round((date - firstThu) / (7 * 864e5));
 }
-/* Monday date of a given ISO week in a given year (for a friendly label) */
-function isoWeekMonday(year, week) {
-  const jan4 = new Date(Date.UTC(year, 0, 4));
-  const jan4Day = (jan4.getUTCDay() + 6) % 7;
-  const monday = new Date(jan4);
-  monday.setUTCDate(jan4.getUTCDate() - jan4Day + (week - 1) * 7);
-  return monday;
+/* ---------- Run-day logic ----------
+   Routes belong to the weekly run (default: Wednesday). The page shows the *upcoming*
+   run: on the run day it shows that day's route; from the day after it rolls forward to
+   next week's run so people can prep. The week number is the ISO week of the run date. */
+function stripTime(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function nextRunOnOrAfter(d) {
+  const r = stripTime(d);
+  return addDays(r, (CONFIG.runDay - r.getDay() + 7) % 7); // 0 days if today is the run day
+}
+function formatRunDate(d) {
+  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+}
+/* "37-Electric Dog.gpx" -> {week:37, title:"Electric Dog"};  "37.gpx" -> {week:37, title:""} */
+function parseGpxName(name) {
+  const base = name.replace(/\.gpx$/i, "");
+  const m = base.match(/^\s*0*(\d{1,2})\s*[-_.]?\s*(.*)$/);
+  if (!m) return null;
+  const week = parseInt(m[1], 10);
+  if (!week || week < 1 || week > 53) return null;
+  return { week, title: (m[2] || "").trim() };
 }
 
-const THIS_WEEK = isoWeek(new Date());
-const YEAR = new Date().getFullYear();
+const DEFAULT_RUN = nextRunOnOrAfter(new Date());
+const DAY_MS = 864e5;
 
 /* ---------- State ---------- */
-let map, gpxLayer, currentWeek = THIS_WEEK;
-let caseGroup = null;          // white "casing" drawn beneath the route for contrast
-let objectUrl = null;
+let map, gpxLayer, caseGroup = null, objectUrl = null;
+let currentRun = DEFAULT_RUN;   // the run date currently displayed (a run-day Date)
+let routeIndex = {};            // week number -> { id, name, title }
 
 /* ---------- Elements ---------- */
 const el = (id) => document.getElementById(id);
@@ -262,13 +277,22 @@ function setStats(distM, ascM) {
   el("statAsc").textContent    = (ascM || ascM === 0) ? Math.round(ascM) + " m" : "–";
 }
 
-function updateWeekLabel() {
-  const mon = isoWeekMonday(YEAR, currentWeek);
-  const fmt = mon.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-  el("weekTitle").textContent = "Week " + currentWeek +
-    (currentWeek === THIS_WEEK ? " — This week's route" : " route");
-  el("weekSub").textContent = "Week commencing " + fmt +
-    (currentWeek === THIS_WEEK ? "" : "  ·  (browsing — not the current week)");
+function updateLabels(entry) {
+  const week = isoWeek(currentRun);
+  const isUpcoming = currentRun.getTime() === DEFAULT_RUN.getTime();
+  const title = entry && entry.title ? entry.title : "";
+  el("weekTitle").textContent = title || ("Week " + week + " route");
+  el("weekSub").textContent = "🗓 " + formatRunDate(currentRun) +
+    "  ·  Week " + week + (isUpcoming ? "  ·  next run" : "  ·  browsing");
+}
+/* Friendly download filename, e.g. "Billinge 2026-09-09 Electric Dog.gpx" */
+function isoDateLocal(d) {
+  const p = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+}
+function downloadName(entry, runDate) {
+  const title = entry && entry.title ? " " + entry.title : "";
+  return ("Billinge " + isoDateLocal(runDate) + title).replace(/[\\/:*?"<>|]+/g, "").trim() + ".gpx";
 }
 
 /* ---------- Google Drive access ---------- */
@@ -276,25 +300,33 @@ function configReady() {
   return CONFIG.FOLDER_ID && CONFIG.API_KEY &&
          !CONFIG.FOLDER_ID.startsWith("PASTE") && !CONFIG.API_KEY.startsWith("PASTE");
 }
-async function findFile(week) {
-  // Try the plain name first, then a zero-padded fallback (e.g. 36.gpx then 036.gpx / 06.gpx)
-  const names = [week + ".gpx", String(week).padStart(2, "0") + ".gpx"];
-  for (const name of [...new Set(names)]) {
-    const q = `'${CONFIG.FOLDER_ID}' in parents and name = '${name}' and trashed = false`;
-    const url = "https://www.googleapis.com/drive/v3/files"
-      + "?q=" + encodeURIComponent(q)
-      + "&fields=" + encodeURIComponent("files(id,name)")
-      + "&supportsAllDrives=true&includeItemsFromAllDrives=true"
-      + "&key=" + encodeURIComponent(CONFIG.API_KEY);
-    const res = await fetch(url);
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error("Drive API " + res.status + ". " + shortErr(body));
-    }
-    const data = await res.json();
-    if (data.files && data.files.length) return data.files[0];
+// List every .gpx in the folder once and index it by week number. Because filenames can
+// carry a title ("37-Electric Dog.gpx") we can't query by exact name — we list and parse.
+async function fetchIndex() {
+  const q = `'${CONFIG.FOLDER_ID}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+  const url = "https://www.googleapis.com/drive/v3/files"
+    + "?q=" + encodeURIComponent(q)
+    + "&fields=" + encodeURIComponent("files(id,name)")
+    + "&pageSize=1000&orderBy=name"
+    + "&supportsAllDrives=true&includeItemsFromAllDrives=true"
+    + "&key=" + encodeURIComponent(CONFIG.API_KEY);
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error("Drive API " + res.status + ". " + shortErr(body));
   }
-  return null;
+  const data = await res.json();
+  const idx = {};
+  (data.files || []).forEach(f => {
+    if (!/\.gpx$/i.test(f.name)) return;
+    const p = parseGpxName(f.name);
+    if (!p) return;
+    // If two files share a week number, prefer the one that has a title.
+    if (!idx[p.week] || (!idx[p.week].title && p.title)) {
+      idx[p.week] = { id: f.id, name: f.name, title: p.title };
+    }
+  });
+  return idx;
 }
 async function downloadGpxText(fileId) {
   const url = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId)
@@ -317,7 +349,7 @@ function frameRoute(bounds) {
   map.setView(bounds.getCenter(), Math.min(map.getBoundsZoom(bounds), 16), { animate: false });
 }
 
-function renderGpx(gpxText, week) {
+function renderGpx(gpxText, entry, runDate) {
   if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
   if (caseGroup) { map.removeLayer(caseGroup); caseGroup = null; }
 
@@ -351,7 +383,7 @@ function renderGpx(gpxText, week) {
     objectUrl = URL.createObjectURL(new Blob([gpxText], { type: "application/gpx+xml" }));
     const dl = el("downloadBtn");
     dl.href = objectUrl;
-    dl.download = "billinge-week-" + week + ".gpx";
+    dl.download = downloadName(entry, runDate || currentRun);
     dl.style.display = "inline-flex";
   });
   gpxLayer.on("error", () => {
@@ -362,28 +394,32 @@ function renderGpx(gpxText, week) {
   gpxLayer.addTo(map);
 }
 
-/* ---------- Load a week ---------- */
-async function loadWeek(week) {
-  currentWeek = week;
-  updateWeekLabel();
-  el("prevBtn").disabled = week <= 1;
-  el("nextBtn").disabled = week >= 53;
-  el("thisBtn").disabled = week === THIS_WEEK;
+/* ---------- Load the run for a given run date ---------- */
+async function loadRun(runDate) {
+  currentRun = runDate;
+  const week = isoWeek(runDate);
+  const entry = routeIndex[week];
+  updateLabels(entry);
+
+  const wkFromDefault = Math.round((runDate - DEFAULT_RUN) / (7 * DAY_MS));
+  el("prevBtn").disabled = wkFromDefault <= -52;   // browse up to a year either side
+  el("nextBtn").disabled = wkFromDefault >= 52;
+  el("thisBtn").disabled = runDate.getTime() === DEFAULT_RUN.getTime();
   el("downloadBtn").style.display = "none";
   setStats(null, null);
 
   if (!configReady()) { showOverlay("ovSetup"); return; }
+  if (!entry) {
+    el("notFoundMsg").textContent =
+      "There's no route uploaded yet for " + formatRunDate(runDate) + " (week " + week + ").";
+    showOverlay("ovNotFound");
+    return;
+  }
 
   showOverlay("ovLoading", true);
   try {
-    const file = await findFile(week);
-    if (!file) {
-      el("notFoundMsg").textContent = "Week " + week + "'s GPX (" + week + ".gpx) hasn't been added yet.";
-      showOverlay("ovNotFound");
-      return;
-    }
-    const gpx = await downloadGpxText(file.id);
-    renderGpx(gpx, week);
+    const gpx = await downloadGpxText(entry.id);
+    renderGpx(gpx, entry, runDate);
   } catch (err) {
     el("errMsg").textContent = err.message || String(err);
     showOverlay("ovError");
@@ -391,7 +427,7 @@ async function loadWeek(week) {
 }
 
 /* ---------- Init ---------- */
-function init() {
+async function init() {
   map = L.map("map", { scrollWheelZoom: true });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -399,11 +435,22 @@ function init() {
   }).addTo(map);
   map.setView([53.49, -2.71], 12); // Billinge area default until a route loads
 
-  el("prevBtn").onclick = () => loadWeek(Math.max(1, currentWeek - 1));
-  el("nextBtn").onclick = () => loadWeek(Math.min(53, currentWeek + 1));
-  el("thisBtn").onclick = () => loadWeek(THIS_WEEK);
+  el("prevBtn").onclick = () => loadRun(addDays(currentRun, -7));
+  el("nextBtn").onclick = () => loadRun(addDays(currentRun, 7));
+  el("thisBtn").onclick = () => loadRun(DEFAULT_RUN);
 
-  loadWeek(THIS_WEEK);
+  updateLabels(null);
+  if (!configReady()) { showOverlay("ovSetup"); return; }
+
+  showOverlay("ovLoading", true);
+  try {
+    routeIndex = await fetchIndex();
+  } catch (err) {
+    el("errMsg").textContent = err.message || String(err);
+    showOverlay("ovError");
+    return;
+  }
+  loadRun(DEFAULT_RUN);
 }
 
 window.addEventListener("load", init);
