@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>This Week's Route — Billinge Running Club</title>
+<meta name="description" content="This week's running route from Billinge Running Club — view it on the map and download the GPX file for your watch or phone.">
+
+<!-- Leaflet (map) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- leaflet-gpx (parse GPX string + compute distance/elevation) -->
+<script src="https://unpkg.com/leaflet-gpx@1.7.0/gpx.js"></script>
+
+<style>
+  :root {
+    /* Brand tokens pulled from billingerunning.club */
+    --brand-green: hsl(143, 66%, 37%);      /* accent / primary */
+    --brand-green-dark: hsl(143, 66%, 29%);
+    --brand-dark: hsl(111, 11%, 12%);       /* near-black green */
+    --brand-cream: hsl(45, 12%, 87%);       /* warm light */
+    --brand-cream-soft: hsl(45, 20%, 94%);
+    --white: #fff;
+    --ink: hsl(111, 11%, 16%);
+    --muted: hsl(111, 6%, 42%);
+    --shadow: 0 2px 10px rgba(0,0,0,.12);
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--font);
+    color: var(--ink);
+    background: var(--brand-cream);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--brand-green-dark); }
+
+  /* ---- Header ---- */
+  header.site {
+    background: var(--brand-dark);
+    color: var(--white);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow);
+  }
+  header.site a.logo { display: inline-flex; align-items: center; text-decoration: none; }
+  header.site img.logo { height: 44px; width: auto; display: block; }
+  header.site .logo-fallback {
+    color: var(--white); font-weight: 700; font-size: 1.1rem; letter-spacing: .3px;
+    text-decoration: none;
+  }
+  header.site .title {
+    margin-left: auto; text-align: right; font-size: .95rem; opacity: .9;
+  }
+  header.site .title strong { display: block; font-size: 1.05rem; opacity: 1; }
+
+  /* ---- Layout ---- */
+  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+
+  .week-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .week-bar h1 {
+    margin: 0; font-size: 1.5rem; color: var(--brand-dark);
+  }
+  .week-bar .week-sub { color: var(--muted); font-size: .95rem; margin: 0; width: 100%; }
+
+  button, .btn {
+    font-family: var(--font); font-size: .95rem; cursor: pointer;
+    border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 600;
+    background: var(--white); color: var(--ink); box-shadow: var(--shadow);
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover, .btn:hover { filter: brightness(.97); }
+  button:disabled { opacity: .5; cursor: default; }
+  .btn-primary { background: var(--brand-green); color: var(--white); }
+  .nav-spacer { flex: 1; }
+
+  /* ---- Map + stats card ---- */
+  .card {
+    background: var(--white); border-radius: 12px; overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  #map { width: 100%; height: 60vh; min-height: 340px; background: var(--brand-cream-soft); }
+
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 0;
+    border-top: 3px solid var(--brand-green);
+  }
+  .stat { flex: 1 1 120px; padding: 14px 16px; text-align: center; border-right: 1px solid #eee; }
+  .stat:last-child { border-right: 0; }
+  .stat .num { font-size: 1.4rem; font-weight: 700; color: var(--brand-dark); }
+  .stat .lbl { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  .actions { padding: 14px 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .actions .hint { color: var(--muted); font-size: .85rem; }
+
+  /* ---- Overlay states over the map ---- */
+  .map-wrap { position: relative; }
+  .overlay {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.92); text-align: center; padding: 24px; z-index: 500;
+  }
+  .overlay.show { display: flex; }
+  .overlay .box { max-width: 420px; }
+  .overlay h2 { margin: 0 0 8px; color: var(--brand-dark); }
+  .overlay p { margin: 0 0 4px; color: var(--muted); }
+  .spinner {
+    width: 42px; height: 42px; border: 4px solid var(--brand-cream);
+    border-top-color: var(--brand-green); border-radius: 50%;
+    animation: spin 1s linear infinite; margin: 0 auto 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- Footer ---- */
+  footer.site {
+    background: var(--brand-dark); color: var(--white); margin-top: 24px;
+    padding: 20px 16px; text-align: center; font-size: .9rem;
+  }
+  footer.site a { color: var(--brand-cream); }
+  footer.site .row { margin: 4px 0; }
+
+  @media (max-width: 520px) {
+    header.site img.logo { height: 36px; }
+    .week-bar h1 { font-size: 1.25rem; }
+    #map { height: 52vh; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <a class="logo" href="https://billingerunning.club" target="_blank" rel="noopener">
+    <img class="logo" alt="Billinge Running Club"
+         src="https://images.squarespace-cdn.com/content/v1/5f44ebce05165c0ccdcadf71/697050e6-eaad-47cc-975e-235603b2bab8/Untitled+%2829.7+%C3%97+21+cm%29.png"
+         onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=\'logo-fallback\'>Billinge Running Club</span>');">
+  </a>
+  <div class="title"><strong>This Week's Route</strong>Free GPX for members &amp; visitors</div>
+</header>
+
+<main>
+  <div class="week-bar">
+    <h1 id="weekTitle">Loading…</h1>
+    <p class="week-sub" id="weekSub"></p>
+  </div>
+
+  <div class="nav-bar week-bar">
+    <button id="prevBtn" title="Previous week">← Prev</button>
+    <button id="thisBtn" class="btn-primary" title="Jump to the current week">This week</button>
+    <button id="nextBtn" title="Next week">Next →</button>
+  </div>
+
+  <div class="card">
+    <div class="map-wrap">
+      <div id="map"></div>
+
+      <div class="overlay" id="ovLoading">
+        <div class="box"><div class="spinner"></div><p>Fetching this week's route…</p></div>
+      </div>
+      <div class="overlay" id="ovNotFound">
+        <div class="box">
+          <h2>No route uploaded yet</h2>
+          <p id="notFoundMsg">This week's GPX hasn't been added yet.</p>
+          <p>Check back soon, or use <strong>Prev</strong> to see a recent route.</p>
+        </div>
+      </div>
+      <div class="overlay" id="ovError">
+        <div class="box">
+          <h2>Couldn't load the route</h2>
+          <p id="errMsg"></p>
+        </div>
+      </div>
+      <div class="overlay" id="ovSetup">
+        <div class="box">
+          <h2>Almost there</h2>
+          <p>This page needs its Google Drive <strong>Folder ID</strong> and <strong>API key</strong> added to the <code>CONFIG</code> block in <code>index.html</code>.</p>
+          <p>See the README for setup steps.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="statDist">–</div><div class="lbl">Distance</div></div>
+      <div class="stat"><div class="num" id="statDistMi">–</div><div class="lbl">Miles</div></div>
+      <div class="stat"><div class="num" id="statAsc">–</div><div class="lbl">Elevation gain</div></div>
+    </div>
+
+    <div class="actions">
+      <a id="downloadBtn" class="btn btn-primary" download href="#" style="display:none;">⬇ Download GPX</a>
+      <span class="hint">Import into Strava, Garmin Connect, Komoot, or your watch.</span>
+    </div>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="row"><strong>Billinge Running Club</strong></div>
+  <div class="row"><a href="https://billingerunning.club" target="_blank" rel="noopener">billingerunning.club</a>
+    &nbsp;·&nbsp; <a href="mailto:info@billingerunning.club">info@billingerunning.club</a></div>
+  <div class="row" style="opacity:.7">Route map data © OpenStreetMap contributors</div>
+</footer>
+
+<script>
+/* ================================================================
+   CONFIG — the only thing the maintainer edits.
+   ================================================================ */
+const CONFIG = {
+  FOLDER_ID: "167G1f3wpk85hLEdKkiio1x-0TaErFmrF",   // Google Drive "WeeklyRoutes" folder
+  API_KEY:   "AIzaSyBN0VfafvwpHasC9a0j9r4LlvcmUeVq6VA", // read-only, referrer-restricted key
+  routeColor: "#209D50"           // brand green for the map track
+};
+
+/* ---------- ISO-8601 week number (Mon-based) ---------- */
+function isoWeek(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = (date.getUTCDay() + 6) % 7;          // Mon=0 … Sun=6
+  date.setUTCDate(date.getUTCDate() - day + 3);    // nearest Thursday
+  const firstThu = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const firstDay = (firstThu.getUTCDay() + 6) % 7;
+  firstThu.setUTCDate(firstThu.getUTCDate() - firstDay + 3);
+  return 1 + Math.round((date - firstThu) / (7 * 864e5));
+}
+/* Monday date of a given ISO week in a given year (for a friendly label) */
+function isoWeekMonday(year, week) {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = (jan4.getUTCDay() + 6) % 7;
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - jan4Day + (week - 1) * 7);
+  return monday;
+}
+
+const THIS_WEEK = isoWeek(new Date());
+const YEAR = new Date().getFullYear();
+
+/* ---------- State ---------- */
+let map, gpxLayer, currentWeek = THIS_WEEK;
+let caseGroup = null;          // white "casing" drawn beneath the route for contrast
+let objectUrl = null;
+
+/* ---------- Elements ---------- */
+const el = (id) => document.getElementById(id);
+const overlays = ["ovLoading", "ovNotFound", "ovError", "ovSetup"];
+function showOverlay(id, keepMap) {
+  overlays.forEach(o => el(o).classList.toggle("show", o === id));
+  if (!keepMap) {
+    if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+    if (caseGroup) { map.removeLayer(caseGroup); caseGroup = null; }
+  }
+}
+function clearOverlays() { overlays.forEach(o => el(o).classList.remove("show")); }
+
+function setStats(distM, ascM) {
+  el("statDist").textContent   = distM ? (distM / 1000).toFixed(1) + " km" : "–";
+  el("statDistMi").textContent = distM ? (distM / 1609.344).toFixed(1) : "–";
+  el("statAsc").textContent    = (ascM || ascM === 0) ? Math.round(ascM) + " m" : "–";
+}
+
+function updateWeekLabel() {
+  const mon = isoWeekMonday(YEAR, currentWeek);
+  const fmt = mon.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  el("weekTitle").textContent = "Week " + currentWeek +
+    (currentWeek === THIS_WEEK ? " — This week's route" : " route");
+  el("weekSub").textContent = "Week commencing " + fmt +
+    (currentWeek === THIS_WEEK ? "" : "  ·  (browsing — not the current week)");
+}
+
+/* ---------- Google Drive access ---------- */
+function configReady() {
+  return CONFIG.FOLDER_ID && CONFIG.API_KEY &&
+         !CONFIG.FOLDER_ID.startsWith("PASTE") && !CONFIG.API_KEY.startsWith("PASTE");
+}
+async function findFile(week) {
+  // Try the plain name first, then a zero-padded fallback (e.g. 36.gpx then 036.gpx / 06.gpx)
+  const names = [week + ".gpx", String(week).padStart(2, "0") + ".gpx"];
+  for (const name of [...new Set(names)]) {
+    const q = `'${CONFIG.FOLDER_ID}' in parents and name = '${name}' and trashed = false`;
+    const url = "https://www.googleapis.com/drive/v3/files"
+      + "?q=" + encodeURIComponent(q)
+      + "&fields=" + encodeURIComponent("files(id,name)")
+      + "&supportsAllDrives=true&includeItemsFromAllDrives=true"
+      + "&key=" + encodeURIComponent(CONFIG.API_KEY);
+    const res = await fetch(url);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error("Drive API " + res.status + ". " + shortErr(body));
+    }
+    const data = await res.json();
+    if (data.files && data.files.length) return data.files[0];
+  }
+  return null;
+}
+async function downloadGpxText(fileId) {
+  const url = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId)
+    + "?alt=media&supportsAllDrives=true&key=" + encodeURIComponent(CONFIG.API_KEY);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Download failed (" + res.status + ").");
+  return res.text();
+}
+function shortErr(body) {
+  try { return (JSON.parse(body).error || {}).message || ""; } catch { return ""; }
+}
+
+/* ---------- Render ---------- */
+// Frame the route deterministically. Waits (via rAF) until the map container has a real
+// size, then uses getBoundsZoom (reliable) with a cap so a tiny/degenerate route doesn't
+// slam to street level.
+function frameRoute(bounds) {
+  const size = map.getSize();
+  if (size.x < 60 || size.y < 60) { requestAnimationFrame(() => frameRoute(bounds)); return; }
+  map.setView(bounds.getCenter(), Math.min(map.getBoundsZoom(bounds), 16), { animate: false });
+}
+
+function renderGpx(gpxText, week) {
+  if (gpxLayer) { map.removeLayer(gpxLayer); gpxLayer = null; }
+  if (caseGroup) { map.removeLayer(caseGroup); caseGroup = null; }
+
+  const blank = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  gpxLayer = new L.GPX(gpxText, {
+    async: true,
+    marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: blank, wptIconUrls: {} },
+    polyline_options: { color: CONFIG.routeColor, weight: 4, opacity: 1 }
+  });
+
+  gpxLayer.on("loaded", (e) => {
+    const g = e.target;
+
+    // White casing beneath the route (drawn as separate polylines, sent to back)
+    caseGroup = L.layerGroup();
+    (function collect(layer) {
+      if (layer instanceof L.Polyline && typeof layer.getLatLngs === "function") {
+        L.polyline(layer.getLatLngs(), { color: "#fff", weight: 8, opacity: 0.9 }).addTo(caseGroup);
+      } else if (typeof layer.getLayers === "function") {
+        layer.getLayers().forEach(collect);
+      }
+    })(g);
+    caseGroup.addTo(map);
+    caseGroup.eachLayer(l => l.bringToBack());
+
+    frameRoute(g.getBounds());
+    setStats(g.get_distance(), g.get_elevation_gain());
+    clearOverlays();
+    // Prepare download
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(new Blob([gpxText], { type: "application/gpx+xml" }));
+    const dl = el("downloadBtn");
+    dl.href = objectUrl;
+    dl.download = "billinge-week-" + week + ".gpx";
+    dl.style.display = "inline-flex";
+  });
+  gpxLayer.on("error", () => {
+    el("errMsg").textContent = "That file didn't look like a valid GPX track.";
+    showOverlay("ovError");
+  });
+
+  gpxLayer.addTo(map);
+}
+
+/* ---------- Load a week ---------- */
+async function loadWeek(week) {
+  currentWeek = week;
+  updateWeekLabel();
+  el("prevBtn").disabled = week <= 1;
+  el("nextBtn").disabled = week >= 53;
+  el("thisBtn").disabled = week === THIS_WEEK;
+  el("downloadBtn").style.display = "none";
+  setStats(null, null);
+
+  if (!configReady()) { showOverlay("ovSetup"); return; }
+
+  showOverlay("ovLoading", true);
+  try {
+    const file = await findFile(week);
+    if (!file) {
+      el("notFoundMsg").textContent = "Week " + week + "'s GPX (" + week + ".gpx) hasn't been added yet.";
+      showOverlay("ovNotFound");
+      return;
+    }
+    const gpx = await downloadGpxText(file.id);
+    renderGpx(gpx, week);
+  } catch (err) {
+    el("errMsg").textContent = err.message || String(err);
+    showOverlay("ovError");
+  }
+}
+
+/* ---------- Init ---------- */
+function init() {
+  map = L.map("map", { scrollWheelZoom: true });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  map.setView([53.49, -2.71], 12); // Billinge area default until a route loads
+
+  el("prevBtn").onclick = () => loadWeek(Math.max(1, currentWeek - 1));
+  el("nextBtn").onclick = () => loadWeek(Math.min(53, currentWeek + 1));
+  el("thisBtn").onclick = () => loadWeek(THIS_WEEK);
+
+  loadWeek(THIS_WEEK);
+}
+
+window.addEventListener("load", init);
+</script>
+</body>
+</html>

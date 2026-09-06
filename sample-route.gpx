@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Billinge Running Club - sample" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Sample Route - Billinge Loop</name>
+  </metadata>
+  <trk>
+    <name>Sample Route - Billinge Loop</name>
+    <trkseg>
+      <trkpt lat="53.49000" lon="-2.71000"><ele>92</ele></trkpt>
+      <trkpt lat="53.49150" lon="-2.70850"><ele>98</ele></trkpt>
+      <trkpt lat="53.49300" lon="-2.70700"><ele>105</ele></trkpt>
+      <trkpt lat="53.49450" lon="-2.70500"><ele>118</ele></trkpt>
+      <trkpt lat="53.49600" lon="-2.70250"><ele>132</ele></trkpt>
+      <trkpt lat="53.49700" lon="-2.69900"><ele>141</ele></trkpt>
+      <trkpt lat="53.49650" lon="-2.69550"><ele>128</ele></trkpt>
+      <trkpt lat="53.49500" lon="-2.69300"><ele>112</ele></trkpt>
+      <trkpt lat="53.49300" lon="-2.69250"><ele>104</ele></trkpt>
+      <trkpt lat="53.49100" lon="-2.69400"><ele>99</ele></trkpt>
+      <trkpt lat="53.48950" lon="-2.69650"><ele>94</ele></trkpt>
+      <trkpt lat="53.48880" lon="-2.70000"><ele>90</ele></trkpt>
+      <trkpt lat="53.48900" lon="-2.70400"><ele>89</ele></trkpt>
+      <trkpt lat="53.48950" lon="-2.70750"><ele>90</ele></trkpt>
+      <trkpt lat="53.49000" lon="-2.71000"><ele>92</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
