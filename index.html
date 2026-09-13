@@ -347,7 +347,10 @@ async function fetchIndex() {
   return idx;
 }
 async function downloadGpxText(fileId) {
-  const url = "https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId)
+  // NOTE: use the "/download/drive/v3/" host, not "/drive/v3/". The plain path returns 403
+  // with no CORS header for anonymous (API-key) media requests; the download host returns
+  // 200 with Access-Control-Allow-Origin, so the browser can read the bytes.
+  const url = "https://www.googleapis.com/download/drive/v3/files/" + encodeURIComponent(fileId)
     + "?alt=media&supportsAllDrives=true&key=" + encodeURIComponent(CONFIG.API_KEY);
   const res = await fetch(url);
   if (!res.ok) throw new Error("Download failed (" + res.status + ").");
