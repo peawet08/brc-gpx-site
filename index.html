@@ -306,6 +306,9 @@ function isoDateLocal(d) {
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
 }
 function downloadName(entry, runDate) {
+  // Use the real Drive filename (e.g. "38 - The Beast Clockwise.gpx")
+  if (entry && entry.name) return entry.name;
+  // Fallback if we somehow have no filename (e.g. local testing)
   const title = entry && entry.title ? " " + entry.title : "";
   return ("Billinge " + isoDateLocal(runDate) + title).replace(/[\\/:*?"<>|]+/g, "").trim() + ".gpx";
 }
