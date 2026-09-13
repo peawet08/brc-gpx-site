@@ -42,8 +42,8 @@ The page is built around the **Wednesday run**:
   people arriving after a run see the *upcoming* one to prep for.
 - The **week number is the ISO week of the run date** (e.g. the run on Wed 2 Sep 2026 is
   week 36; Wed 9 Sep is week 37).
-- Visitors can still use **← Prev / Next →** to browse other weeks, and **Upcoming run** to
-  jump back to the default.
+- Visitors can still use **← Prev / Next →** to browse other weeks; reloading the page
+  returns to the upcoming run.
 
 Runs on a different day? Change `runDay` in the `CONFIG` block of `index.html`
 (`0`=Sunday … `3`=Wednesday … `6`=Saturday).
@@ -150,6 +150,7 @@ just deploy to GitHub Pages and test there.)*
 - It works out the upcoming Wednesday run, lists the folder via the Google Drive API,
   matches the file whose name starts with that week number, downloads it, draws it on an
   OpenStreetMap map, reads any title from the filename, and offers it for download.
-- **Prev / Next / Upcoming run** buttons let viewers browse other weeks; if a week's file
-  isn't uploaded yet, a friendly "no route uploaded yet" message shows.
+- **Prev / Next** buttons let viewers browse other weeks (a **Download GPX** button sits
+  between them, and a second one at the bottom of the page); if a week's file isn't uploaded
+  yet, a friendly "no route uploaded yet" message shows.
 - No server, no database, no page edits — just the weekly file upload to Drive.

@@ -81,6 +81,7 @@
   }
   button:hover, .btn:hover { filter: brightness(.97); }
   button:disabled { opacity: .5; cursor: default; }
+  a.btn.disabled { opacity: .45; pointer-events: none; box-shadow: none; }
   .btn-primary { background: var(--brand-green); color: var(--white); }
   .nav-spacer { flex: 1; }
 
@@ -154,7 +155,7 @@
 
   <div class="nav-bar week-bar">
     <button id="prevBtn" title="Previous week's run">← Prev</button>
-    <button id="thisBtn" class="btn-primary" title="Jump to the next upcoming run">Upcoming run</button>
+    <a id="downloadTop" class="btn btn-primary disabled" download href="#" title="Download this route's GPX file">⬇ Download GPX</a>
     <button id="nextBtn" title="Next week's run">Next →</button>
   </div>
 
@@ -194,8 +195,8 @@
     </div>
 
     <div class="actions">
-      <a id="downloadBtn" class="btn btn-primary" download href="#" style="display:none;">⬇ Download GPX</a>
       <span class="hint">Import into Strava, Garmin Connect, Komoot, or your watch.</span>
+      <a id="downloadBtn" class="btn btn-primary" download href="#" style="display:none; margin-left:auto;">⬇ Download GPX</a>
     </div>
   </div>
 </main>
@@ -270,6 +271,20 @@ function showOverlay(id, keepMap) {
   }
 }
 function clearOverlays() { overlays.forEach(o => el(o).classList.remove("show")); }
+
+/* Two Download GPX buttons: one above the map, one at the bottom. */
+function setDownload(url, name) {
+  const top = el("downloadTop");
+  top.href = url; top.download = name; top.classList.remove("disabled");
+  const bottom = el("downloadBtn");
+  bottom.href = url; bottom.download = name; bottom.style.display = "inline-flex";
+}
+function clearDownload() {
+  const top = el("downloadTop");
+  top.classList.add("disabled"); top.removeAttribute("href");
+  const bottom = el("downloadBtn");
+  bottom.style.display = "none"; bottom.removeAttribute("href");
+}
 
 function setStats(distM, ascM) {
   el("statDist").textContent   = distM ? (distM / 1000).toFixed(1) + " km" : "–";
@@ -381,10 +396,7 @@ function renderGpx(gpxText, entry, runDate) {
     // Prepare download
     if (objectUrl) URL.revokeObjectURL(objectUrl);
     objectUrl = URL.createObjectURL(new Blob([gpxText], { type: "application/gpx+xml" }));
-    const dl = el("downloadBtn");
-    dl.href = objectUrl;
-    dl.download = downloadName(entry, runDate || currentRun);
-    dl.style.display = "inline-flex";
+    setDownload(objectUrl, downloadName(entry, runDate || currentRun));
   });
   gpxLayer.on("error", () => {
     el("errMsg").textContent = "That file didn't look like a valid GPX track.";
@@ -404,8 +416,7 @@ async function loadRun(runDate) {
   const wkFromDefault = Math.round((runDate - DEFAULT_RUN) / (7 * DAY_MS));
   el("prevBtn").disabled = wkFromDefault <= -52;   // browse up to a year either side
   el("nextBtn").disabled = wkFromDefault >= 52;
-  el("thisBtn").disabled = runDate.getTime() === DEFAULT_RUN.getTime();
-  el("downloadBtn").style.display = "none";
+  clearDownload();
   setStats(null, null);
 
   if (!configReady()) { showOverlay("ovSetup"); return; }
@@ -437,7 +448,6 @@ async function init() {
 
   el("prevBtn").onclick = () => loadRun(addDays(currentRun, -7));
   el("nextBtn").onclick = () => loadRun(addDays(currentRun, 7));
-  el("thisBtn").onclick = () => loadRun(DEFAULT_RUN);
 
   updateLabels(null);
   if (!configReady()) { showOverlay("ovSetup"); return; }
